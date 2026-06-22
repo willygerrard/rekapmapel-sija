@@ -41,6 +41,11 @@ $error = $_GET['error'] ?? '';
                     <i class="bi bi-box-arrow-in-right"></i> Login
                 </button>
             </form>
+
+            <div class="text-center mt-3">
+                <span class="text-muted small">Belum punya akun?</span>
+                <a href="signup.php" class="small text-decoration-none fw-semibold">Daftar di sini</a>
+            </div>
         </div>
     </div>
 
