@@ -3,6 +3,8 @@ services:
     build: .
     container_name: rekapmapel_php
     restart: unless-stopped
+    env_file:
+    - .env
     volumes:
       - .:/var/www/html
     ports:
