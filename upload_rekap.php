@@ -17,6 +17,58 @@ if (!$user_id) {
 $pesan = '';
 $pesan_type = '';
 
+// Mode: Siswa submit alasan tidak tepat waktu (tanpa upload foto)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['simpan_alasan']) && !isset($_FILES['foto_dokumen'])) {
+    $alasan_kategori = $_POST['alasan_kategori'] ?? '';
+    $alasan_lainnya = trim($_POST['alasan_lainnya'] ?? '');
+
+    $valid_kategori = ['guru_sulit', 'tugas_belum_selesai', 'kendala_teknis', 'lainnya'];
+
+    if (!in_array($alasan_kategori, $valid_kategori, true)) {
+        $pesan = 'Kategori alasan tidak valid.';
+        $pesan_type = 'danger';
+    } else {
+        if ($alasan_kategori === 'lainnya' && $alasan_lainnya === '') {
+            $pesan = 'Alasan lainnya wajib diisi.';
+            $pesan_type = 'danger';
+        } else {
+            // Logika periode tugas: jika sekarang bulan berjalan, periode tugas = 1 bulan sebelumnya.
+            // Contoh: sekarang Agustus => periode tugas = Juli.
+            $periode_bulan = date('Y-m', strtotime('-1 month'));
+
+            // Hanya izinkan setelah tanggal 1 pada bulan berjalan dimulai.
+            // Karena periode_bulan = bulan sebelumnya, maka input alasan boleh sejak tanggal 1 bulan berjalan.
+            $batas_ijik = new DateTime(date('Y-m-01 00:00:00')); // tanggal 1 bulan ini jam 00:00
+
+            if (new DateTime('now') < $batas_ijik) {
+                $pesan = 'Form alasan baru bisa diisi mulai tanggal 1 pada bulan berikutnya.';
+                $pesan_type = 'danger';
+            } else {
+                try {
+                    // Simpan sebagai record di tabel rekap_tugas (foto NULL)
+                    $stmt = $pdo->prepare(
+                        "INSERT INTO rekap_tugas (siswa_id, kelas, foto_dokumen, diupload_at, alasan_kategori, alasan_lainnya, periode_bulan) 
+                         VALUES (?, ?, NULL, NOW(), ?, ?, ?)"
+                    );
+                    $stmt->execute([
+                        $user_id,
+                        $kelas,
+                        $alasan_kategori,
+                        $alasan_kategori === 'lainnya' ? $alasan_lainnya : null,
+                        $periode_bulan
+                    ]);
+
+                    $pesan = '✅ Alasan pembinaan berhasil disimpan. Terima kasih.';
+                    $pesan_type = 'success';
+                } catch (PDOException $e) {
+                    $pesan = 'Gagal simpan alasan: ' . htmlspecialchars($e->getMessage());
+                    $pesan_type = 'danger';
+                }
+            }
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto_dokumen'])) {
     $file = $_FILES['foto_dokumen'];
 
@@ -136,6 +188,60 @@ $riwayat_list = $riwayat->fetchAll(PDO::FETCH_ASSOC);
                 </form>
             </div>
         </div>
+
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header bg-warning text-dark py-3">
+                <h5 class="card-title mb-0 fw-bold">📝 Alasan Tidak Bisa Upload Tepat Waktu</h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted small mb-3">
+                    Pengisian alasan untuk periode bulan sebelumnya baru dibuka setelah tanggal 1 pada bulan berikutnya.
+                </p>
+
+                <form method="POST" autocomplete="off">
+                    <input type="hidden" name="simpan_alasan" value="1">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Pilih alasan (A-D)</label>
+                        <select class="form-select" name="alasan_kategori" required>
+                            <option value="" selected disabled>-- Pilih alasan --</option>
+                            <option value="guru_sulit">A. Guru sulit ditemui</option>
+                            <option value="tugas_belum_selesai">B. Tugas belum selesai</option>
+                            <option value="kendala_teknis">C. Kendala teknis</option>
+                            <option value="lainnya">D. Lainnya</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3" id="div-alasan-lainnya" style="display:none;">
+                        <label class="form-label fw-semibold">Alasan lainnya</label>
+                        <input type="text" class="form-control" name="alasan_lainnya" placeholder="Tulis alasan singkat" />
+                    </div>
+
+                    <button type="submit" class="btn btn-warning w-100 fw-bold py-2 text-dark">
+                        <i class="bi bi-send"></i> Simpan Alasan Pembinaan
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            (function(){
+                const select = document.querySelector('select[name="alasan_kategori"]');
+                const divLainnya = document.getElementById('div-alasan-lainnya');
+                const inputLainnya = divLainnya ? divLainnya.querySelector('input[name="alasan_lainnya"]') : null;
+
+                if (!select || !divLainnya || !inputLainnya) return;
+
+                function toggle(){
+                    const show = select.value === 'lainnya';
+                    divLainnya.style.display = show ? 'block' : 'none';
+                    if (!show) inputLainnya.value = '';
+                }
+
+                select.addEventListener('change', toggle);
+                toggle();
+            })();
+        </script>
 
         <!-- RIWAYAT -->
         <h6 class="fw-bold mb-3">📜 Riwayat Upload Kamu</h6>

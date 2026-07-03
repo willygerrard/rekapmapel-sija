@@ -24,7 +24,7 @@ if (isset($_GET['sentil_id'])) {
     
     if ($siswa && $siswa['no_wa_ortu']) {
         require_once 'fonnte.php';
-        $pesan_wa = "🔔 *PENGINGAT: RekapMapel SIJA*\n\n" . "Diberitahukan kepada Orang Tua/Wali dari * " . htmlspecialchars($siswa['nama']) . " (Kelas " . htmlspecialchars($siswa['kelas']) . ")* bahwa yang bersangkutan *BELUM* mengupload foto dokumen rekap tugas untuk minggu ini.\n\nMohon agar segera diingatkan. Terima kasih.";
+        $pesan_wa = "🔔 *PENGINGAT: RekapMapel SIJA*\n\n" . "Diberitahukan kepada Orang Tua/Wali dari * " . htmlspecialchars($siswa['nama']) . " (Kelas " . htmlspecialchars($siswa['kelas']) . ")* bahwa yang bersangkutan *BELUM* mengupload foto dokumen rekap tugas untuk bulan ini.\n\nMohon agar segera diingatkan. Terima kasih.";
         
         // Jalakno fungsi Fonnte-mu
         kirimWA($siswa['no_wa_ortu'], $pesan_wa);
@@ -38,25 +38,58 @@ if (isset($_GET['sentil_id'])) {
 }
 
 // 2. Query Taktis: Ambil kabeh siswa + Hitung total foto sing wis diupload + Ambil foto terakhir
-// Menggunakan LEFT JOIN antarane tabel users lan rekap_tugas
+// plus alasan pembinaan untuk periode tugas = bulan ini - 1
+$periode_tugas = date('Y-m', strtotime('-1 month'));
+
 $query_siswa = "
     SELECT 
         u.id, u.nama, u.kelas, u.no_wa_ortu,
-        COUNT(r.id) AS total_upload,
+        COUNT(CASE WHEN r.foto_dokumen IS NOT NULL THEN 1 END) AS total_upload,
         MAX(r.diupload_at) AS terakhir_upload,
-        (SELECT r2.foto_dokumen FROM rekap_tugas r2 WHERE r2.siswa_id = u.id ORDER BY r2.diupload_at DESC LIMIT 1) AS foto_terakhir
+        (SELECT r2.foto_dokumen FROM rekap_tugas r2 WHERE r2.siswa_id = u.id ORDER BY r2.diupload_at DESC LIMIT 1) AS foto_terakhir,
+        (SELECT r3.alasan_kategori FROM rekap_tugas r3 WHERE r3.siswa_id = u.id AND r3.periode_bulan = ? ORDER BY r3.id DESC LIMIT 1) AS alasan_kategori,
+        (SELECT r3.alasan_lainnya FROM rekap_tugas r3 WHERE r3.siswa_id = u.id AND r3.periode_bulan = ? ORDER BY r3.id DESC LIMIT 1) AS alasan_lainnya
     FROM users u
     LEFT JOIN rekap_tugas r ON u.id = r.siswa_id
     WHERE u.role = 'siswa'
     GROUP BY u.id
     ORDER BY u.kelas ASC, u.nama ASC
 ";
-$stmt = $pdo->query($query_siswa);
+
+// 3. Eksekusi nganggo prepare lan execute()
+$stmt = $pdo->prepare($query_siswa);
+$stmt->execute([$periode_tugas, $periode_tugas]); // Kirim nilai kanggo ?
 $daftar_siswa = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // 3. Query Ringkesan Widget Box (Statistik)
 $total_siswa_binaan = count($daftar_siswa);
 $total_seluruh_foto = $pdo->query("SELECT COUNT(*) FROM rekap_tugas")->fetchColumn();
+
+// --- PROSES TOMBOL: HAPUS SISWA (Bypass Administrasi) ---
+if (isset($_GET['hapus_siswa_id'])) {
+    $hapus_id = $_GET['hapus_siswa_id'];
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // 1. Busak dhisik kabeh rekam foto tugase arek iku ing database (biar gak ketatap error Foreign Key Restrict)
+        $stmt_foto = $pdo->prepare("DELETE FROM rekap_tugas WHERE siswa_id = ?");
+        $stmt_foto->execute([$hapus_id]);
+        
+        // 2. Nembe busak akun siswane soko tabel users
+        $stmt_user = $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'siswa'");
+        $stmt_user->execute([$hapus_id]);
+        
+        $pdo->commit();
+        
+        $pesan_alert = "🗑️ Sukses membabat entek data siswa lan riwayat tugase soko sistem!";
+        $pesan_type = "success";
+    } catch (PDOException $e) {
+        $pdo->rollBack();
+        $pesan_alert = "❌ Gagal mbusak siswa: " . htmlspecialchars($e->getMessage());
+        $pesan_type = "danger";
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -135,6 +168,7 @@ $total_seluruh_foto = $pdo->query("SELECT COUNT(*) FROM rekap_tugas")->fetchColu
                                 <th class="text-center" style="width: 12%;">Kelas</th>
                                 <th class="text-center" style="width: 15%;">Jumlah Upload</th>
                                 <th>Terakhir Upload</th>
+                                <th style="width: 20%;">Alasan Pembinaan (Bln ini - 1)</th>
                                 <th class="text-center" style="width: 25%;">Aksi Pemantauan</th>
                             </tr>
                         </thead>
@@ -161,6 +195,25 @@ $total_seluruh_foto = $pdo->query("SELECT COUNT(*) FROM rekap_tugas")->fetchColu
                                     <td class="text-muted small">
                                         <?= $s['terakhir_upload'] ? date('d M Y, H:i', strtotime($s['terakhir_upload'])) : '<span class="text-danger italic">Belum Pernah</span>' ?>
                                     </td>
+                                    <td class="text-muted small">
+                                        <?php
+                                            $kategori = $s['alasan_kategori'] ?? null;
+                                            if (!$kategori) {
+                                                echo '<span class="text-muted">-</span>';
+                                            } else {
+                                                $label = $kategori;
+                                                if ($kategori === 'guru_sulit') $label = 'A. Guru sulit ditemui';
+                                                elseif ($kategori === 'tugas_belum_selesai') $label = 'B. Tugas belum selesai';
+                                                elseif ($kategori === 'kendala_teknis') $label = 'C. Kendala teknis';
+                                                elseif ($kategori === 'lainnya') $label = 'D. Lainnya';
+
+                                                echo '<span class="fw-semibold">' . htmlspecialchars($label) . '</span>';
+                                                if ($kategori === 'lainnya' && !empty($s['alasan_lainnya'])) {
+                                                    echo '<div class="text-muted small mt-1">"' . htmlspecialchars($s['alasan_lainnya']) . '"</div>';
+                                                }
+                                            }
+                                        ?>
+                                    </td>
                                     <td class="text-center">
                                         <div class="d-flex justify-content-center gap-2">
                                             <!-- Tombol Ndelok Foto (Mung aktif yen arek-e wis tau upload) -->
@@ -177,6 +230,11 @@ $total_seluruh_foto = $pdo->query("SELECT COUNT(*) FROM rekap_tugas")->fetchColu
                                             <!-- Tombol Sentil WA -->
                                             <a href="dashboard_admin.php?sentil_id=<?= $s['id'] ?>" class="btn btn-sm btn-warning text-dark fw-bold <?= $s['no_wa_ortu'] ? '' : 'disabled' ?>" onclick="return confirm('Kirim notifikasi pengingat WA ke orang tua <?= htmlspecialchars($s['nama']) ?>?')">
                                                 <i class="bi bi-bell-fill"></i> Sentil WA
+                                            </a>
+
+                                            <!-- [ANYAR] Tombol Hapus Siswa (Nggo sing Lulus/Metu) -->
+                                            <a href="dashboard_admin.php?hapus_siswa_id=<?= $s['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('⚠️ AWAS! Opo sampeyan yakin arep mbusak total data <?= htmlspecialchars($s['nama']) ?> soko sistem? Kabeh riwayat upload-e bakal ilang entek!')">
+                                                <i class="bi bi-trash-fill"></i>
                                             </a>
                                         </div>
                                     </td>
