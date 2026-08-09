@@ -1,4 +1,5 @@
 <?php
+require 'cron_guard.php'; // Cegah akses publik via web tanpa token
 include 'koneksi.php';
 require_once 'fonnte.php';
 

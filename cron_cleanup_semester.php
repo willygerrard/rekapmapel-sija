@@ -1,4 +1,5 @@
 <?php
+require 'cron_guard.php'; // Cegah akses publik via web tanpa token
 include 'koneksi.php';
 
 // Taktis: Goleki data sing tanggal_upload-e wis luwih soko 5 sasi kepungkur
