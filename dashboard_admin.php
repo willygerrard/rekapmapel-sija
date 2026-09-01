@@ -45,7 +45,7 @@ $query_siswa = "
     SELECT 
         u.id, u.nama, u.kelas, u.no_wa_ortu,
         COUNT(CASE WHEN r.foto_dokumen IS NOT NULL THEN 1 END) AS total_upload,
-        MAX(r.diupload_at) AS terakhir_upload,
+        MAX(CASE WHEN r.foto_dokumen IS NOT NULL THEN r.diupload_at END) AS terakhir_upload,
         (SELECT r2.foto_dokumen FROM rekap_tugas r2 WHERE r2.siswa_id = u.id ORDER BY r2.diupload_at DESC LIMIT 1) AS foto_terakhir,
         (SELECT r3.alasan_kategori FROM rekap_tugas r3 WHERE r3.siswa_id = u.id AND r3.periode_bulan = ? ORDER BY r3.id DESC LIMIT 1) AS alasan_kategori,
         (SELECT r3.alasan_lainnya FROM rekap_tugas r3 WHERE r3.siswa_id = u.id AND r3.periode_bulan = ? ORDER BY r3.id DESC LIMIT 1) AS alasan_lainnya

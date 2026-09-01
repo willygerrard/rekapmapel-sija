@@ -73,7 +73,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto_dokumen'])) {
     $file = $_FILES['foto_dokumen'];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        $pesan = "Gagal upload, coba lagi.";
+        switch ($file['error']) {
+            case UPLOAD_ERR_INI_SIZE:
+            case UPLOAD_ERR_FORM_SIZE:
+                $pesan = "File terlalu besar (melebihi batas maksimal server). Coba kompres/perkecil ukuran foto dulu, maksimal 5MB.";
+                break;
+            case UPLOAD_ERR_PARTIAL:
+                $pesan = "Upload terputus di tengah jalan (koneksi tidak stabil). Coba upload ulang.";
+                break;
+            default:
+                $pesan = "Gagal upload, coba lagi.";
+        }
         $pesan_type = 'danger';
     } else {
         $ekstensi_boleh = ['jpg', 'jpeg', 'png'];
