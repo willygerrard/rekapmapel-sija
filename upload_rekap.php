@@ -17,6 +17,14 @@ if (!$user_id) {
 $pesan = '';
 $pesan_type = '';
 
+// Label kategori alasan, dipakai di form maupun riwayat
+$label_alasan = [
+    'guru_sulit'           => 'A. Guru sulit ditemui',
+    'tugas_belum_selesai'  => 'B. Tugas belum selesai',
+    'kendala_teknis'       => 'C. Kendala teknis',
+    'lainnya'              => 'D. Lainnya',
+];
+
 // Mode: Siswa submit alasan tidak tepat waktu (tanpa upload foto)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['simpan_alasan']) && !isset($_FILES['foto_dokumen'])) {
     $alasan_kategori = $_POST['alasan_kategori'] ?? '';
@@ -47,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['simpan_alasan']) && !
                 try {
                     // Simpan sebagai record di tabel rekap_tugas (foto NULL)
                     $stmt = $pdo->prepare(
-                        "INSERT INTO rekap_tugas (siswa_id, kelas, foto_dokumen, diupload_at, alasan_kategori, alasan_lainnya, periode_bulan) 
+                        "INSERT INTO rekap_tugas (siswa_id, kelas, foto_dokumen, diupload_at, alasan_kategori, alasan_lainnya, periode_bulan)
                          VALUES (?, ?, NULL, NOW(), ?, ?, ?)"
                     );
                     $stmt->execute([
@@ -138,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto_dokumen'])) {
     }
 }
 
-// Ambil riwayat upload siswa ini
+// Ambil riwayat siswa ini (foto maupun alasan), 10 entri terakhir
 $riwayat = $pdo->prepare("SELECT * FROM rekap_tugas WHERE siswa_id = ? ORDER BY diupload_at DESC LIMIT 10");
 $riwayat->execute([$user_id]);
 $riwayat_list = $riwayat->fetchAll(PDO::FETCH_ASSOC);
@@ -215,10 +223,9 @@ $riwayat_list = $riwayat->fetchAll(PDO::FETCH_ASSOC);
                         <label class="form-label fw-semibold">Pilih alasan (A-D)</label>
                         <select class="form-select" name="alasan_kategori" required>
                             <option value="" selected disabled>-- Pilih alasan --</option>
-                            <option value="guru_sulit">A. Guru sulit ditemui</option>
-                            <option value="tugas_belum_selesai">B. Tugas belum selesai</option>
-                            <option value="kendala_teknis">C. Kendala teknis</option>
-                            <option value="lainnya">D. Lainnya</option>
+                            <?php foreach ($label_alasan as $key => $label): ?>
+                                <option value="<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($label) ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
 
@@ -254,18 +261,44 @@ $riwayat_list = $riwayat->fetchAll(PDO::FETCH_ASSOC);
         </script>
 
         <!-- RIWAYAT -->
-        <h6 class="fw-bold mb-3">📜 Riwayat Upload Kamu</h6>
+        <h6 class="fw-bold mb-3">📜 Riwayat Kamu</h6>
         <?php if (empty($riwayat_list)): ?>
-            <p class="text-muted small">Belum ada riwayat upload.</p>
+            <p class="text-muted small">Belum ada riwayat.</p>
         <?php else: ?>
-        <div class="list-group">
+        <div class="list-group mb-2">
             <?php foreach ($riwayat_list as $r): ?>
-            <a href="<?= htmlspecialchars($r['foto_dokumen']) ?>" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-image"></i> Rekap <?= date('d M Y', strtotime($r['diupload_at'])) ?></span>
-                <small class="text-muted"><?= date('H:i', strtotime($r['diupload_at'])) ?></small>
-            </a>
+                <?php if (!empty($r['foto_dokumen'])): ?>
+                    <!-- Entri upload foto: bisa diklik untuk lihat foto -->
+                    <a href="<?= htmlspecialchars($r['foto_dokumen']) ?>" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-image text-success"></i>
+                            Upload Foto Rekap
+                            <span class="text-muted small d-block d-sm-inline ms-sm-1"><?= date('d M Y', strtotime($r['diupload_at'])) ?></span>
+                        </span>
+                        <small class="text-muted"><?= date('H:i', strtotime($r['diupload_at'])) ?></small>
+                    </a>
+                <?php else: ?>
+                    <!-- Entri alasan pembinaan: tidak bisa diklik, bukan foto -->
+                    <div class="list-group-item d-flex justify-content-between align-items-start bg-light">
+                        <span>
+                            <i class="bi bi-chat-left-text text-warning"></i>
+                            Alasan Pembinaan
+                            <span class="fw-semibold d-block small mt-1">
+                                <?= htmlspecialchars($label_alasan[$r['alasan_kategori']] ?? $r['alasan_kategori']) ?>
+                            </span>
+                            <?php if ($r['alasan_kategori'] === 'lainnya' && !empty($r['alasan_lainnya'])): ?>
+                                <span class="text-muted small d-block">"<?= htmlspecialchars($r['alasan_lainnya']) ?>"</span>
+                            <?php endif; ?>
+                            <?php if (!empty($r['periode_bulan'])): ?>
+                                <span class="text-muted small d-block">Periode: <?= htmlspecialchars($r['periode_bulan']) ?></span>
+                            <?php endif; ?>
+                        </span>
+                        <small class="text-muted"><?= date('d M Y, H:i', strtotime($r['diupload_at'])) ?></small>
+                    </div>
+                <?php endif; ?>
             <?php endforeach; ?>
         </div>
+        <p class="text-muted small">Menampilkan 10 entri terbaru (upload foto & alasan pembinaan).</p>
         <?php endif; ?>
 
     </div>

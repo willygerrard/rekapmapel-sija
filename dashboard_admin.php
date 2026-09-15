@@ -16,19 +16,19 @@ $pesan_type = '';
 
 if (isset($_GET['sentil_id'])) {
     $siswa_id = $_GET['sentil_id'];
-    
+
     // Ambil data siswa lan nomer WA ortu
     $stmt_siswa = $pdo->prepare("SELECT nama, kelas, no_wa_ortu FROM users WHERE id = ? AND role = 'siswa'");
     $stmt_siswa->execute([$siswa_id]);
     $siswa = $stmt_siswa->fetch();
-    
+
     if ($siswa && $siswa['no_wa_ortu']) {
         require_once 'fonnte.php';
         $pesan_wa = "🔔 *PENGINGAT: RekapMapel SIJA*\n\n" . "Diberitahukan kepada Orang Tua/Wali dari * " . htmlspecialchars($siswa['nama']) . " (Kelas " . htmlspecialchars($siswa['kelas']) . ")* bahwa yang bersangkutan *BELUM* mengupload foto dokumen rekap tugas untuk bulan ini.\n\nMohon agar segera diingatkan. Terima kasih.";
-        
+
         // Jalakno fungsi Fonnte-mu
         kirimWA($siswa['no_wa_ortu'], $pesan_wa);
-        
+
         $pesan_alert = "✅ Berhasil menyentil Orang Tua " . htmlspecialchars($siswa['nama']) . " via WhatsApp!";
         $pesan_type = "success";
     } else {
@@ -42,10 +42,10 @@ if (isset($_GET['sentil_id'])) {
 $periode_tugas = date('Y-m', strtotime('-1 month'));
 
 $query_siswa = "
-    SELECT 
+    SELECT
         u.id, u.nama, u.kelas, u.no_wa_ortu,
         COUNT(CASE WHEN r.foto_dokumen IS NOT NULL THEN 1 END) AS total_upload,
-        MAX(CASE WHEN r.foto_dokumen IS NOT NULL THEN r.diupload_at END) AS terakhir_upload,
+        MAX(r.diupload_at) AS terakhir_upload,
         (SELECT r2.foto_dokumen FROM rekap_tugas r2 WHERE r2.siswa_id = u.id ORDER BY r2.diupload_at DESC LIMIT 1) AS foto_terakhir,
         (SELECT r3.alasan_kategori FROM rekap_tugas r3 WHERE r3.siswa_id = u.id AND r3.periode_bulan = ? ORDER BY r3.id DESC LIMIT 1) AS alasan_kategori,
         (SELECT r3.alasan_lainnya FROM rekap_tugas r3 WHERE r3.siswa_id = u.id AND r3.periode_bulan = ? ORDER BY r3.id DESC LIMIT 1) AS alasan_lainnya
@@ -68,20 +68,20 @@ $total_seluruh_foto = $pdo->query("SELECT COUNT(*) FROM rekap_tugas")->fetchColu
 // --- PROSES TOMBOL: HAPUS SISWA (Bypass Administrasi) ---
 if (isset($_GET['hapus_siswa_id'])) {
     $hapus_id = $_GET['hapus_siswa_id'];
-    
+
     try {
         $pdo->beginTransaction();
-        
+
         // 1. Busak dhisik kabeh rekam foto tugase arek iku ing database (biar gak ketatap error Foreign Key Restrict)
         $stmt_foto = $pdo->prepare("DELETE FROM rekap_tugas WHERE siswa_id = ?");
         $stmt_foto->execute([$hapus_id]);
-        
+
         // 2. Nembe busak akun siswane soko tabel users
         $stmt_user = $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'siswa'");
         $stmt_user->execute([$hapus_id]);
-        
+
         $pdo->commit();
-        
+
         $pesan_alert = "🗑️ Sukses membabat entek data siswa lan riwayat tugase soko sistem!";
         $pesan_type = "success";
     } catch (PDOException $e) {
@@ -117,7 +117,7 @@ if (isset($_GET['hapus_siswa_id'])) {
 
     <!-- MAIN KONTEN -->
     <div class="container mt-4 mb-5">
-        
+
         <!-- Notifikasi Alert -->
         <?php if ($pesan_alert): ?>
         <div class="alert alert-<?= $pesan_type ?> alert-dismissible fade show shadow-sm" role="alert">
@@ -175,7 +175,7 @@ if (isset($_GET['hapus_siswa_id'])) {
                         <tbody>
                             <?php if (empty($daftar_siswa)): ?>
                                 <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">Belum ada data siswa di database.</td>
+                                    <td colspan="7" class="text-center py-4 text-muted">Belum ada data siswa di database.</td>
                                 </tr>
                             <?php else: $no = 1; foreach ($daftar_siswa as $s): ?>
                                 <tr>
@@ -216,11 +216,14 @@ if (isset($_GET['hapus_siswa_id'])) {
                                     </td>
                                     <td class="text-center">
                                         <div class="d-flex justify-content-center gap-2">
-                                            <!-- Tombol Ndelok Foto (Mung aktif yen arek-e wis tau upload) -->
-                                            <?php if ($s['foto_terakhir']): ?>
-                                                <a href="<?= htmlspecialchars($s['foto_terakhir']) ?>" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
-                                                    <i class="bi bi-eye"></i> Lihat Foto
-                                                </a>
+                                            <!-- Tombol Riwayat Foto: buka modal, ambil semua foto via AJAX -->
+                                            <?php if ($s['total_upload'] > 0): ?>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-primary fw-semibold btn-riwayat-foto"
+                                                        data-siswa-id="<?= (int) $s['id'] ?>"
+                                                        data-siswa-nama="<?= htmlspecialchars($s['nama'], ENT_QUOTES) ?>">
+                                                    <i class="bi bi-images"></i> Riwayat (<?= $s['total_upload'] ?>)
+                                                </button>
                                             <?php else: ?>
                                                 <button class="btn btn-sm btn-outline-secondary fw-semibold" disabled>
                                                     <i class="bi bi-eye-slash"></i> No Image
@@ -248,6 +251,64 @@ if (isset($_GET['hapus_siswa_id'])) {
 
     </div>
 
+    <!-- MODAL RIWAYAT FOTO -->
+    <div class="modal fade" id="modalRiwayatFoto" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold" id="modalRiwayatFotoTitle">Riwayat Foto</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalRiwayatFotoBody">
+                    <p class="text-muted text-center mb-0">Memuat...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            const modalEl = document.getElementById('modalRiwayatFoto');
+            const modalTitle = document.getElementById('modalRiwayatFotoTitle');
+            const modalBody = document.getElementById('modalRiwayatFotoBody');
+            const modal = new bootstrap.Modal(modalEl);
+
+            document.querySelectorAll('.btn-riwayat-foto').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    const siswaId = btn.getAttribute('data-siswa-id');
+                    const siswaNama = btn.getAttribute('data-siswa-nama');
+
+                    modalTitle.textContent = 'Riwayat Foto — ' + siswaNama;
+                    modalBody.innerHTML = '<p class="text-muted text-center mb-0">Memuat...</p>';
+                    modal.show();
+
+                    // PENTING: path ini relatif terhadap dashboard_admin.php.
+                    // Pastikan get_riwayat_foto.php berada di folder yang SAMA dengan file ini.
+                    fetch('get_riwayat_foto.php?siswa_id=' + encodeURIComponent(siswaId))
+                        .then(function (res) {
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            return res.json();
+                        })
+                        .then(function (data) {
+                            if (!Array.isArray(data) || data.length === 0) {
+                                modalBody.innerHTML = '<p class="text-muted text-center mb-0">Belum ada foto.</p>';
+                                return;
+                            }
+                            modalBody.innerHTML = data.map(function (item) {
+                                const tanggal = item.diupload_at ? item.diupload_at : '';
+                                return '<a href="' + item.foto_dokumen + '" target="_blank" class="d-block mb-3 text-decoration-none border rounded p-2">' +
+                                    '<img src="' + item.foto_dokumen + '" class="img-fluid rounded mb-1" style="max-height:220px;display:block;margin:0 auto;" loading="lazy">' +
+                                    '<div class="small text-muted text-center mt-1">' + tanggal + '</div>' +
+                                    '</a>';
+                            }).join('');
+                        })
+                        .catch(function (err) {
+                            modalBody.innerHTML = '<p class="text-danger text-center mb-0">Gagal memuat riwayat foto (' + err.message + '). Cek apakah get_riwayat_foto.php ada di folder yang sama.</p>';
+                        });
+                });
+            });
+        })();
+    </script>
 </body>
 </html>
