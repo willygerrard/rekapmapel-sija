@@ -1,5 +1,7 @@
 <?php
 session_start();
+require 'csrf.php';
+
 if (isset($_SESSION['is_login']) && $_SESSION['is_login'] === true) {
     header("Location: index.php");
     exit();
@@ -29,6 +31,7 @@ $error = $_GET['error'] ?? '';
             <?php endif; ?>
 
             <form action="proses_login.php" method="POST">
+                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Username</label>
                     <input type="text" class="form-control" name="username" required autofocus>

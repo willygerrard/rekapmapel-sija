@@ -1,4 +1,5 @@
 <?php
+include 'csrf.php';
 include 'koneksi.php';
 session_start();
 if (!isset($_SESSION['is_login']) || $_SESSION['is_login'] !== true) {
@@ -196,6 +197,7 @@ $riwayat_list = $riwayat->fetchAll(PDO::FETCH_ASSOC);
                     Notifikasi akan otomatis dikirim ke orang tua/wali via WhatsApp.
                 </p>
                 <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Foto Dokumen (JPG/PNG, maks 5MB)</label>
                         <input type="file" class="form-control" name="foto_dokumen" accept="image/jpeg,image/png" required>
@@ -217,6 +219,7 @@ $riwayat_list = $riwayat->fetchAll(PDO::FETCH_ASSOC);
                 </p>
 
                 <form method="POST" autocomplete="off">
+                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
                     <input type="hidden" name="simpan_alasan" value="1">
 
                     <div class="mb-3">

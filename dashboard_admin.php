@@ -1,4 +1,5 @@
 <?php
+include 'csrf.php';
 include 'koneksi.php';
 session_start();
 
@@ -14,8 +15,11 @@ $nama_admin = $_SESSION['nama'] ?? $_SESSION['username'] ?? 'Admin Lab';
 $pesan_alert = '';
 $pesan_type = '';
 
-if (isset($_GET['sentil_id'])) {
-    $siswa_id = $_GET['sentil_id'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sentil_id'])) {
+    if (!csrf_verify($_POST['csrf_token'] ?? '')) {
+        die('CSRF token tidak valid');
+    }
+    $siswa_id = $_POST['sentil_id'];
 
     // Ambil data siswa lan nomer WA ortu
     $stmt_siswa = $pdo->prepare("SELECT nama, kelas, no_wa_ortu FROM users WHERE id = ? AND role = 'siswa'");
@@ -66,8 +70,11 @@ $total_siswa_binaan = count($daftar_siswa);
 $total_seluruh_foto = $pdo->query("SELECT COUNT(*) FROM rekap_tugas")->fetchColumn();
 
 // --- PROSES TOMBOL: HAPUS SISWA (Bypass Administrasi) ---
-if (isset($_GET['hapus_siswa_id'])) {
-    $hapus_id = $_GET['hapus_siswa_id'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hapus_siswa_id'])) {
+    if (!csrf_verify($_POST['csrf_token'] ?? '')) {
+        die('CSRF token tidak valid');
+    }
+    $hapus_id = $_POST['hapus_siswa_id'];
 
     try {
         $pdo->beginTransaction();
@@ -231,14 +238,22 @@ if (isset($_GET['hapus_siswa_id'])) {
                                             <?php endif; ?>
 
                                             <!-- Tombol Sentil WA -->
-                                            <a href="dashboard_admin.php?sentil_id=<?= $s['id'] ?>" class="btn btn-sm btn-warning text-dark fw-bold <?= $s['no_wa_ortu'] ? '' : 'disabled' ?>" onclick="return confirm('Kirim notifikasi pengingat WA ke orang tua <?= htmlspecialchars($s['nama']) ?>?')">
-                                                <i class="bi bi-bell-fill"></i> Sentil WA
-                                            </a>
+                                            <form method="POST" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                                                <input type="hidden" name="sentil_id" value="<?= (int) $s['id'] ?>">
+                                                <button type="submit" class="btn btn-sm btn-warning text-dark fw-bold <?= $s['no_wa_ortu'] ? '' : 'disabled' ?>" onclick="return confirm('Kirim notifikasi pengingat WA ke orang tua <?= htmlspecialchars($s['nama']) ?>?')">
+                                                    <i class="bi bi-bell-fill"></i> Sentil WA
+                                                </button>
+                                            </form>
 
-                                            <!-- [ANYAR] Tombol Hapus Siswa (Nggo sing Lulus/Metu) -->
-                                            <a href="dashboard_admin.php?hapus_siswa_id=<?= $s['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('⚠️ AWAS! Opo sampeyan yakin arep mbusak total data <?= htmlspecialchars($s['nama']) ?> soko sistem? Kabeh riwayat upload-e bakal ilang entek!')">
-                                                <i class="bi bi-trash-fill"></i>
-                                            </a>
+                                            <!-- Tombol Hapus Siswa -->
+                                            <form method="POST" class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                                                <input type="hidden" name="hapus_siswa_id" value="<?= (int) $s['id'] ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('⚠️ AWAS! Opo sampeyan yakin arep mbusak total data <?= htmlspecialchars($s['nama']) ?> soko sistem? Kabeh riwayat upload-e bakal ilang entek!')">
+                                                    <i class="bi bi-trash-fill"></i>
+                                                </button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>

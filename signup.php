@@ -1,8 +1,9 @@
 <?php
+require 'csrf.php';
 require 'koneksi.php';
 
 $pesan = "";
-$token_sah = "RekapSija2026";
+$token_sah = getenv('SIGNUP_TOKEN') ?: '';
 
 if (isset($_POST['register'])) {
 
@@ -65,6 +66,7 @@ if (isset($_POST['register'])) {
             <?= $pesan; ?>
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Nama Lengkap</label>
                     <input type="text" class="form-control" name="nama" required>

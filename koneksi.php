@@ -1,9 +1,9 @@
 <?php
-$host = 'db';
-$db   = 'db_rekapmapel';
-$user = 'rekapmapel_user';
-$pass = 'ganti_password_kuat_juga';
-$port = '3306';
+$host = getenv('DB_HOST') ?: 'db';
+$db   = getenv('DB_NAME') ?: 'db_rekapmapel';
+$user = getenv('DB_USER') ?: 'rekapmapel_user';
+$pass = getenv('DB_PASS') ?: getenv('MYSQL_PASSWORD') ?: '';
+$port = getenv('DB_PORT') ?: '3306';
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;port=$port;charset=utf8mb4", $user, $pass);
